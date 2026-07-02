@@ -1,0 +1,12 @@
+node_modules/
+.env
+.env.*
+!.env.example
+.vercel
+.DS_Store
+tasks/
+
+# The wiki holds personal content — kept local only, never published.
+# The deployed function reads embeddings from Supabase, so it doesn't need
+# these files at runtime; they're only used locally by scripts/embed.js.
+wiki/
