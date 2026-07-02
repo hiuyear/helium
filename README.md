@@ -1,8 +1,14 @@
 # Helium
 
-A wiki-grounded AI agent that answers questions about Hiu Yan Kwok, built to pitch
-her to recruiters. Helium is embedded in [her portfolio](https://github.com/hiuyear/portfolio2)
-as a chat sidebar; this repo is the backend that powers it.
+Helium answers questions about me. It's a little AI rep I built into my portfolio —
+a chat sidebar that recruiters can ask anything about my background, projects, and
+goals, and it answers grounded only in a personal wiki I wrote. This repo is the
+backend that powers it.
+
+I originally built Helium inside my portfolio repo, which I keep private. I pulled
+the backend out into its own repo so I can keep building it in the open without
+exposing the rest of my site — so what you're looking at here is Helium's engine,
+minus the personal content it draws from (more on that below).
 
 ## How it works
 
@@ -27,10 +33,11 @@ The knowledge base is a set of markdown files. `scripts/embed.js` embeds each fi
 into a Supabase table (`wiki_chunks`) that `search_wiki` queries at runtime — this
 is retrieval-augmented generation (RAG): the model only answers from the wiki.
 
-> **Note:** the `wiki/` markdown holds personal content and is intentionally kept
-> out of this repo (gitignored). The deployed function doesn't need it — it reads
-> the already-embedded chunks from Supabase. `wiki/` is only used locally to
-> (re)build those embeddings via `scripts/embed.js`.
+> **On the wiki:** the `wiki/` markdown is the personal content Helium speaks from,
+> so I keep it out of this repo (gitignored) — same reason my portfolio stays private.
+> The deployed function never needs it: at runtime it reads the already-embedded
+> chunks from Supabase. The markdown only lives on my machine, where I use it to
+> (re)build those embeddings with `scripts/embed.js`.
 
 ## Layout
 
