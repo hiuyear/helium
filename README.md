@@ -40,11 +40,36 @@ is retrieval-augmented generation (RAG): the model only answers from the wiki.
 > chunks from Supabase. The markdown only lives on my machine, where I use it to
 > (re)build those embeddings with `scripts/embed.js`.
 
+If you want to see the knowledge layout without private content, use
+`wiki-template/`.
+
 ## Layout
 
 - `api/chat.js` — the serverless endpoint (agent loop + RAG). Deployed as a Vercel function.
 - `wiki/` — the knowledge base (markdown). Local-only / gitignored; not in this repo.
+- `wiki-template/` — public scaffold of the wiki schema and folder structure.
 - `scripts/embed.js` — embeds `wiki/` into Supabase. Run after editing the wiki.
+
+## Wiki structure template
+
+The repo includes a safe template at `wiki-template/` that mirrors the structure
+Helium expects:
+
+```text
+wiki/
+  identity.md
+  education.md
+  skills.md
+  goals.md
+  experience/
+    one-file-per-role.md
+  projects/
+    one-file-per-project.md
+```
+
+This structure is inspired by my work at Matter Lab on agentic memory systems,
+adapted here into a much smaller and simplified portfolio-scale setup. The key
+idea is still the same: break knowledge into focused, retrievable units.
 
 ## Environment variables
 

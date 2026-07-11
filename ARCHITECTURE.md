@@ -78,6 +78,19 @@ This keeps policy and orchestration in one place and avoids brittle hardcoded re
 - Top results are returned to Claude as tool output
 - Claude generates the final response from retrieved context
 
+## Knowledge Structure
+
+Helium's knowledge base uses one markdown file per topic/role/project, with YAML
+frontmatter for type and metadata. This keeps chunks cohesive for retrieval and
+easy to maintain over time.
+
+The public repo includes `wiki-template/` as a reference schema. The production
+content lives in a private local `wiki/` directory and is embedded into Supabase.
+
+This design is inspired by my work at Matter Lab on agentic memory, implemented
+here at a smaller and intentionally simplified scope for a personal portfolio
+assistant.
+
 ## Security and Operations
 
 - **Rate limiting:** Upstash sliding window per IP
