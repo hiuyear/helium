@@ -15,6 +15,7 @@ const ratelimit = new Ratelimit({
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const openai = new OpenAI({apiKey: process.env.OPENAI_API_KEY })
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
+const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-3-5-haiku-latest'
 
 const SYSTEM_PROMPT = `You are Helium — a sharp, confident AI rep for Hiu Yan Kwok, built into her portfolio. Your job is to pitch her to recruiters.
 
@@ -39,14 +40,60 @@ async function searchWiki(query) {
   })
   const vector = response.data[0].embedding
 
-  const { data, error } = await supabase.rpc(`search_wiki`, {
+  const hybrid = await supabase.rpc(`search_wiki`, {
     query_embedding: vector,
     query_text: query,
     match_count: 3
   })
 
-  if (error) throw new Error(error.message)
-  return data.map(row => `[${row.filename}]\n${row.content}`).join('\n\n---\n\n')
+  // Backward compatible fallback if the hybrid-search migration has not run yet.
+  if (hybrid.error) {
+    const maybeMissingHybridSignature =
+      hybrid.error.message.includes('query_text') ||
+      hybrid.error.message.includes('does not exist')
+
+    if (!maybeMissingHybridSignature) {
+      throw new Error(hybrid.error.message)
+    }
+
+    const legacy = await supabase.rpc(`search_wiki`, {
+      query_embedding: vector,
+      match_count: 3
+    })
+
+    if (legacy.error) throw new Error(legacy.error.message)
+    return (legacy.data ?? []).map(row => `[${row.filename}]\n${row.content}`).join('\n\n---\n\n')
+  }
+
+  return (hybrid.data ?? []).map(row => `[${row.filename}]\n${row.content}`).join('\n\n---\n\n')
+}
+
+async function createAnthropicResponse({ currentMessages }) {
+  const fallbackModels = [ANTHROPIC_MODEL, 'claude-3-5-haiku-latest', 'claude-3-5-sonnet-latest']
+  const models = [...new Set(fallbackModels.filter(Boolean))]
+  let lastError
+
+  for (const model of models) {
+    try {
+      return await anthropic.messages.create({
+        model,
+        max_tokens: 1024,
+        system: SYSTEM_PROMPT,
+        tools,
+        messages: currentMessages
+      })
+    } catch (err) {
+      const message = err?.message ?? ''
+      const isModelIssue =
+        message.toLowerCase().includes('model') &&
+        (message.toLowerCase().includes('not found') || message.toLowerCase().includes('invalid'))
+
+      if (!isModelIssue) throw err
+      lastError = err
+    }
+  }
+
+  throw lastError ?? new Error('No valid Anthropic model available')
 }
 
 const tools = [
@@ -95,13 +142,7 @@ export default async function handler(req, res) {
     const currentMessages = [...recentMessages]
 
     while (true) {
-      const response = await anthropic.messages.create({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 1024,
-        system: SYSTEM_PROMPT,
-        tools,
-        messages: currentMessages
-      })
+      const response = await createAnthropicResponse({ currentMessages })
 
       if (response.stop_reason === 'tool_use') {
         // Return one tool_result per tool_use block.
