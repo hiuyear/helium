@@ -10,3 +10,5 @@ tasks/
 # The deployed function reads embeddings from Supabase, so it doesn't need
 # these files at runtime; they're only used locally by scripts/embed.js.
 wiki/
+tutorial
+resume/
