@@ -41,12 +41,13 @@ async function searchWiki(query) {
 
   const { data, error } = await supabase.rpc(`search_wiki`, {
     query_embedding: vector,
+    query_text: query,
     match_count: 3
   })
 
   if (error) throw new Error(error.message)
-    return data.map(row => `[${row.filename}]\n${row.content}`).join('\n\n---\n\n')
-  }
+  return data.map(row => `[${row.filename}]\n${row.content}`).join('\n\n---\n\n')
+}
 
 const tools = [
   {
@@ -86,47 +87,42 @@ export default async function handler(req, res) {
   }
 
   const recentMessages = messages
-  .slice(-20)
-  .filter(m => typeof m.content === 'string')
+    .slice(-20)
+    .filter((m) => typeof m.content === 'string')
 
 
   try {
     const currentMessages = [...recentMessages]
 
-while (true) {
-  const response = await anthropic.messages.create({
-    model: 'claude-haiku-4-5-20251001',
-    max_tokens: 1024,
-    system: SYSTEM_PROMPT,
-    tools,
-    messages: currentMessages
-  })
+    while (true) {
+      const response = await anthropic.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 1024,
+        system: SYSTEM_PROMPT,
+        tools,
+        messages: currentMessages
+      })
 
-  if (response.stop_reason === 'tool_use') {
-    // Claude can request several searches in a single turn. The API requires
-    // exactly one tool_result per tool_use block, so we must handle all of
-    // them — handling only the first one produces a malformed next request.
-    const toolUses = response.content.filter(b => b.type === 'tool_use')
+      if (response.stop_reason === 'tool_use') {
+        // Return one tool_result per tool_use block.
+        const toolUses = response.content.filter((b) => b.type === 'tool_use')
 
-    const toolResults = await Promise.all(
-      toolUses.map(async (toolUse) => ({
-        type: 'tool_result',
-        tool_use_id: toolUse.id,
-        content: await searchWiki(toolUse.input.query)
-      }))
-    )
+        const toolResults = await Promise.all(
+          toolUses.map(async (toolUse) => ({
+            type: 'tool_result',
+            tool_use_id: toolUse.id,
+            content: await searchWiki(toolUse.input.query)
+          }))
+        )
 
-    currentMessages.push({ role: 'assistant', content: response.content })
-    currentMessages.push({ role: 'user', content: toolResults })
-    continue
-  }
+        currentMessages.push({ role: 'assistant', content: response.content })
+        currentMessages.push({ role: 'user', content: toolResults })
+        continue
+      }
 
-  // Any other stop reason (end_turn, max_tokens, etc.) means we're done —
-  // return whatever text Claude produced. Falling through here instead of
-  // enumerating stop reasons guarantees we never loop forever.
-  const text = response.content.find(b => b.type === 'text')?.text ?? ''
-  return res.status(200).json({ content: text })
-}
+      const text = response.content.find((b) => b.type === 'text')?.text ?? ''
+      return res.status(200).json({ content: text })
+    }
 
   } catch (err) {
     console.error(err)

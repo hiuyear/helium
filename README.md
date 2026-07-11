@@ -22,7 +22,8 @@ api/chat.js  ── the agent loop ───────────────
       │  2. call Claude (Haiku) with the search_wiki tool     │
       │  3. Claude asks to search → run search_wiki:          │
       │        - embed the query (OpenAI text-embedding-3)    │
-      │        - vector search over the wiki (Supabase pgvector)
+      │        - hybrid search over the wiki (Supabase):      │
+      │            vector similarity + full-text (RRF)      │
       │     ...handles MULTIPLE parallel tool calls per turn  │
       │  4. feed results back, loop until Claude answers      │
       ▼                                                       │
@@ -53,7 +54,7 @@ Set these locally in `.env` (gitignored) and in the Vercel project:
 |---|---|
 | `ANTHROPIC_API_KEY` | Claude (the model) |
 | `OPENAI_API_KEY` | embeddings for search |
-| `SUPABASE_URL` / `SUPABASE_ANON_KEY` | vector store (`wiki_chunks` + `search_wiki` RPC) |
+| `SUPABASE_URL` / `SUPABASE_ANON_KEY` | vector + full-text store (`wiki_chunks` + `search_wiki` RPC) |
 | `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | rate limiting |
 
 ## Local development
@@ -74,3 +75,19 @@ The embed script has no de-dup — re-embed clean:
 # 3. re-embed
 npm run embed
 ```
+
+## Hybrid search migration
+
+Search combines **vector similarity** (semantic) with **Postgres full-text search**
+(keyword/exact matches) using reciprocal rank fusion. Run the migration once in
+Supabase before deploying an updated `api/chat.js`:
+
+```bash
+# paste supabase/migrations/001_hybrid_search.sql into the Supabase SQL editor
+# or, if you use the Supabase CLI:
+supabase db push
+```
+
+The migration adds a generated `fts` column on `wiki_chunks` and replaces the
+`search_wiki` RPC to accept both `query_embedding` and `query_text`. No re-embed
+is required — existing rows pick up the full-text index automatically.
