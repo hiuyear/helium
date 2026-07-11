@@ -10,6 +10,10 @@ the backend out into its own repo so I can keep building it in the open without
 exposing the rest of my site — so what you're looking at here is Helium's engine,
 minus the personal content it draws from (more on that below).
 
+## Architecture
+
+For a deeper technical breakdown of Helium's retrieval pipeline, system design, and engineering tradeoffs, see [`ARCHITECTURE.md`](./ARCHITECTURE.md).
+
 ## How it works
 
 ```
