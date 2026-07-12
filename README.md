@@ -5,6 +5,8 @@ a chat sidebar that recruiters can ask anything about my background, projects, a
 goals, and it answers grounded only in a personal wiki I wrote. This repo is the
 backend that powers it.
 
+https://github.com/user-attachments/assets/bd5283cb-95b7-4be2-9dd0-912331de60fa
+
 I originally built Helium inside my portfolio repo, which I keep private. I pulled
 the backend out into its own repo so I can keep building it in the open without
 exposing the rest of my site — so what you're looking at here is Helium's engine,
