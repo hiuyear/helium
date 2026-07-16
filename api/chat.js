@@ -15,7 +15,7 @@ const ratelimit = new Ratelimit({
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const openai = new OpenAI({apiKey: process.env.OPENAI_API_KEY })
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
-const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-3-5-haiku-latest'
+const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-haiku-4-5-20251001'
 
 const SYSTEM_PROMPT = `You are Helium — a sharp, confident AI rep for Hiu Yan Kwok, built into her portfolio. Your job is to pitch her to recruiters.
 
@@ -69,7 +69,7 @@ async function searchWiki(query) {
 }
 
 async function createAnthropicResponse({ currentMessages }) {
-  const fallbackModels = [ANTHROPIC_MODEL, 'claude-3-5-haiku-latest', 'claude-3-5-sonnet-latest']
+  const fallbackModels = [ANTHROPIC_MODEL, 'claude-haiku-4-5-20251001', 'claude-sonnet-5']
   const models = [...new Set(fallbackModels.filter(Boolean))]
   let lastError
 
@@ -83,10 +83,13 @@ async function createAnthropicResponse({ currentMessages }) {
         messages: currentMessages
       })
     } catch (err) {
-      const message = err?.message ?? ''
+      const message = (err?.message ?? '').toLowerCase()
       const isModelIssue =
-        message.toLowerCase().includes('model') &&
-        (message.toLowerCase().includes('not found') || message.toLowerCase().includes('invalid'))
+        err?.status === 404 ||
+        (message.includes('model') &&
+          (message.includes('not found') ||
+            message.includes('not_found') ||
+            message.includes('invalid')))
 
       if (!isModelIssue) throw err
       lastError = err
