@@ -5,6 +5,7 @@
   "type": "module",
   "description": "Helium — a wiki-grounded AI agent that pitches Hiu Yan Kwok to recruiters.",
   "scripts": {
+    "build:wiki": "node scripts/build-wiki.js",
     "embed": "node scripts/embed.js"
   },
   "dependencies": {
