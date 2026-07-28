@@ -40,11 +40,13 @@ The knowledge base is a set of markdown files. `scripts/embed.js` embeds each fi
 into a Supabase table (`wiki_chunks`) that `search_wiki` queries at runtime — this
 is retrieval-augmented generation (RAG): the model only answers from the wiki.
 
-> **On the wiki:** the `wiki/` markdown is the personal content Helium speaks from,
-> so I keep it out of this repo (gitignored) — same reason my portfolio stays private.
-> The deployed function never needs it: at runtime it reads the already-embedded
-> chunks from Supabase. The markdown only lives on my machine, where I use it to
-> (re)build those embeddings with `scripts/embed.js`.
+> **On the wiki:** the personal content Helium speaks from lives in a private sibling
+> repo (`personal-wiki`), not here — same reason my portfolio stays private. A local
+> build step (`scripts/build-wiki.js`) reads that repo, substitutes a redacted
+> override for anything under NDA or unpublished, and writes a sanitized copy into
+> `helium_wiki/` (also gitignored). `scripts/embed.js` embeds *that* copy into
+> Supabase. The deployed function never touches any of this — at runtime it only
+> reads the already-embedded chunks.
 
 If you want to see the knowledge layout without private content, use
 `wiki-template/`.
@@ -52,9 +54,10 @@ If you want to see the knowledge layout without private content, use
 ## Layout
 
 - `api/chat.js` — the serverless endpoint (agent loop + RAG). Deployed as a Vercel function.
-- `wiki/` — the knowledge base (markdown). Local-only / gitignored; not in this repo.
 - `wiki-template/` — public scaffold of the wiki schema and folder structure.
-- `scripts/embed.js` — embeds `wiki/` into Supabase. Run after editing the wiki.
+- `scripts/build-wiki.js` — generates `helium_wiki/` from the private wiki + redactions. Local-only inputs and output, both gitignored.
+- `scripts/embed.js` — truncates and re-embeds `helium_wiki/` into Supabase. Run after `build-wiki.js`.
+- `wiki-redactions/` — deliberately vague overrides for anything under NDA or unpublished (currently: Matter Lab). Local-only / gitignored.
 
 ## Wiki structure template
 
@@ -98,14 +101,14 @@ vercel dev             # serves /api/chat locally
 
 ## Updating the wiki
 
-The embed script has no de-dup — re-embed clean:
-
 ```bash
-# 1. edit files in wiki/
-# 2. clear the wiki_chunks table in Supabase
-# 3. re-embed
-npm run embed
+npm run build:wiki   # regenerate helium_wiki/ from the private wiki + redactions
+npm run embed         # truncate wiki_chunks, re-embed everything, re-insert
 ```
+
+`embed.js` truncates before inserting, so this is safe to re-run any time — a page
+removed or redacted upstream actually stops being served, instead of leaving a stale
+row behind.
 
 ## Hybrid search migration
 

@@ -66,10 +66,13 @@ This keeps policy and orchestration in one place and avoids brittle hardcoded re
 
 ### Offline indexing
 
-- Source files live in `wiki/` (local/private)
-- `scripts/embed.js` reads markdown files
-- Each file is embedded once with OpenAI
-- Rows are inserted into `wiki_chunks` in Supabase
+- Source files live in a private sibling repo (`personal-wiki/wiki/`), not this one
+- `scripts/build-wiki.js` copies each file into `helium_wiki/`, substituting a
+  redacted override from `wiki-redactions/` where one exists (currently: Matter Lab,
+  which is under NDA and pre-publication)
+- `scripts/embed.js` truncates `wiki_chunks`, then embeds and re-inserts every file
+  in `helium_wiki/` — a full rebuild each run, not an incremental upsert, so a page
+  removed or newly redacted upstream actually stops being retrievable
 
 ### Online serving
 
@@ -85,11 +88,35 @@ frontmatter for type and metadata. This keeps chunks cohesive for retrieval and
 easy to maintain over time.
 
 The public repo includes `wiki-template/` as a reference schema. The production
-content lives in a private local `wiki/` directory and is embedded into Supabase.
+content lives in a private sibling repo and passes through a redaction layer before
+being embedded into Supabase — see "Wiki Source Separation" below.
 
 This design is inspired by my work at Matter Lab on agentic memory, implemented
 here at a smaller and intentionally simplified scope for a personal portfolio
 assistant.
+
+## Wiki Source Separation
+
+The private wiki also backs resume tailoring, which needs far more detail — and
+occasionally NDA-covered specifics — than a public chatbot should ever surface. Two
+failure modes shaped this design:
+
+- **A single hand-maintained "safe" copy drifts.** Early on, the sanitized wiki was
+  a manually edited duplicate of the private one. It silently lost an entire project
+  page and a contact line — nothing enforced that the copy stayed in sync.
+- **Redacting at embed time leaves nothing to inspect.** Applying redactions inline,
+  with no intermediate artifact, means there's no diff to eyeball before anything
+  reaches a public database.
+
+The fix: the private wiki (`personal-wiki/wiki/`, a separate repo) is the only place
+content gets edited. `scripts/build-wiki.js` regenerates `helium_wiki/` from it on
+every run, substituting a local override from `wiki-redactions/` for any page that
+needs one — currently just Matter Lab. The output directory is wiped and rebuilt
+from scratch each run, so a file deleted or newly excluded upstream actually
+disappears downstream instead of lingering — the same reasoning `scripts/embed.js`
+applies at the database layer (truncate before re-insert, not upsert).
+`wiki-redactions/` stays gitignored even though its content is already public-safe:
+nothing wiki-shaped lives in this repo at all.
 
 ## Security and Operations
 
@@ -102,7 +129,9 @@ assistant.
 
 - This repo contains backend logic (`api/`, `scripts/`, `supabase/`)
 - Portfolio frontend remains separate and calls `/api/chat` through a Vercel rewrite
-- Private wiki content is intentionally excluded from the public repo
+- Private wiki content lives in its own repo (`personal-wiki`) and is intentionally
+  excluded from this one, along with the redaction overrides that sanitize it
+  (see "Wiki Source Separation")
 
 ## Key Tradeoffs
 
