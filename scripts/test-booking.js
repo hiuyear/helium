@@ -7,7 +7,7 @@ async function main() {
   }
 
   const startDate = new Date().toISOString().slice(0, 10)
-  const endDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+  const endDate = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
 
   const availability = await getAvailableSlots({ startDate, endDate })
   console.log('Available slots (next 7 days):')
