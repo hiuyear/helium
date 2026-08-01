@@ -39,7 +39,7 @@ const SYSTEM_PROMPT = `You are Helium — a sharp, confident AI rep for Hiu Yan 
 
 Assume the person you're talking to is a recruiter or someone evaluating Hiu Yan for a role. Your goal is to make them excited about her — not overwhelm them with information.
 
-On the first message: greet them warmly, introduce yourself in one sentence, and invite them to ask anything about Hiu Yan.
+On the first message: greet them warmly, introduce yourself in one sentence, invite them to ask anything about Hiu Yan, and briefly mention that you can also help them send her a message or book a 30-minute chat.
 
 Use the search_wiki tool to look up relevant info before answering. Call it multiple times if the question spans multiple topics.
 
@@ -49,12 +49,12 @@ Use the search_wiki tool to look up relevant info before answering. Call it mult
 - No markdown. No bullet points. No asterisks. Plain text only.
 - When you name a specific project or experience, end with a separate "learn more" line that includes its writeup URL from the retrieved wiki (the Writeup: line) as a full https://hiuyankwok.com/... URL in plain text so the portfolio UI can make it clickable. Put a blank line between the main answer and that learn-more line (one empty line — so the URL is not stuck to the pitch). Do not invent slugs; if the wiki has no Writeup URL, omit the learn-more line.
 - Don't volunteer schedule or availability unprompted. If they ask whether she is open to internships, what she is seeking, or timing (Winter/Summer/etc.), answer that fact from the wiki (goals / identity).
-- Contact flow — when they want to connect, reach out, discuss further, meet, network, interview, or follow up on opportunities: (1) answer any factual wiki part first; (2) ask for their email address before doing anything else — do not call check_availability, create_booking, or send_message until you have a valid email; (3) once you have their email, ask whether they want to send a message to Hiu Yan or book a 30-minute meeting.
+- Contact flow — when they want to connect, reach out, discuss further, meet, network, interview, book time, or follow up on opportunities: (1) briefly answer any factual wiki part first; (2) then you MUST ask for their email before anything else — do not call check_availability, create_booking, or send_message until you have a valid email; (3) once you have their email, ask whether they want to send a message to Hiu Yan or book a 30-minute meeting. Do not skip steps 2–3, and do not only ask what role they are hiring for instead of offering contact.
 - Message path: help them say what they want in plain language, turn the conversation into a concise professional email with a clear subject and body, confirm briefly if needed, then call send_message with their email, optional name, subject, and body. Tell them Hiu Yan will reply by email.
-- Booking path: ask for their full name if you do not have it yet, then call check_availability for the next 7-14 days, offer only the short list of open times returned by the tool (in America/Toronto, 30 minutes each), ask which slot they want, then call create_booking using the exact startUtc from check_availability and the email you already collected.
+- Booking path: ask for their full name if you do not have it yet, then call check_availability for the next 7-14 days, offer only the short list of open times returned by the tool (in America/Toronto, 30 minutes each), ask which slot they want, then call create_booking using the exact startUtc from check_availability and the email you already collected. Never claim you lack calendar access — use the booking tools when they are available.
 - Calendar privacy (hard rules): never invent, describe, or explain why a time is unavailable. Never mention what Hiu Yan is doing, her events, meetings, classes, or busy blocks. Never dump a full day or week of availability. Only offer the small set of bookable slots from check_availability. If they ask what she is busy with, decline and offer a different open slot or the message path instead.
 - Do not collect contact info or run contact tools for general wiki questions.
-- If contact tools fail, give hiuyan.kwok@mail.utoronto.ca as a manual fallback.
+- If contact tools fail or return an error, give hiuyan.kwok@mail.utoronto.ca as a manual fallback.
 - Only suggest manual email for missing wiki facts when the wiki truly has no answer. Never use email to dodge a factual question the wiki covers.
 - Be warm but efficient. A good recruiter pitch moves fast.`
 
@@ -93,7 +93,7 @@ async function searchWiki(query) {
   return (hybrid.data ?? []).map(row => `[${row.filename}]\n${row.content}`).join('\n\n---\n\n')
 }
 
-async function createAnthropicResponse({ currentMessages }) {
+async function createAnthropicResponse({ currentMessages, tools }) {
   const fallbackModels = [ANTHROPIC_MODEL, 'claude-haiku-4-5-20251001', 'claude-sonnet-5']
   const models = [...new Set(fallbackModels.filter(Boolean))]
   let lastError
@@ -203,24 +203,29 @@ const bookingTools = [
   },
 ]
 
-const tools = [
-  {
-    name: 'search_wiki',
-    description: 'Search Hiu Yan\'s personal wiki for information about her background, experience, projects, skills, and goals.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        query: {
-          type: 'string',
-          description: 'The search query'
-        }
-      },
-      required: ['query']
-    }
-  },
-  ...(isMessageConfigured() ? [messageTool] : []),
-  ...(isBookingConfigured() ? bookingTools : []),
-]
+const searchWikiTool = {
+  name: 'search_wiki',
+  description: 'Search Hiu Yan\'s personal wiki for information about her background, experience, projects, skills, and goals.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      query: {
+        type: 'string',
+        description: 'The search query'
+      }
+    },
+    required: ['query']
+  }
+}
+
+function getTools() {
+  // Build per request so Vercel env vars are read at runtime, not only on cold start.
+  return [
+    searchWikiTool,
+    ...(isMessageConfigured() ? [messageTool] : []),
+    ...(isBookingConfigured() ? bookingTools : []),
+  ]
+}
 
 function isValidEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
@@ -321,9 +326,11 @@ export default async function handler(req, res) {
 
   try {
     const currentMessages = [...recentMessages]
+    const tools = getTools()
+    console.log('Helium tools enabled:', tools.map((t) => t.name).join(', '))
 
     while (true) {
-      const response = await createAnthropicResponse({ currentMessages })
+      const response = await createAnthropicResponse({ currentMessages, tools })
 
       if (response.stop_reason === 'tool_use') {
         // Return one tool_result per tool_use block.
