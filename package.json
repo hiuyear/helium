@@ -6,7 +6,10 @@
   "description": "Helium — a wiki-grounded AI agent that pitches Hiu Yan Kwok to recruiters.",
   "scripts": {
     "build:wiki": "node scripts/build-wiki.js",
-    "embed": "node scripts/embed.js"
+    "embed": "node scripts/embed.js",
+    "google:auth": "node scripts/google-auth.js",
+    "test:booking": "node scripts/test-booking.js",
+    "test:message": "node scripts/test-message.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
@@ -14,6 +17,8 @@
     "@upstash/ratelimit": "^2.0.8",
     "@upstash/redis": "^1.38.0",
     "dotenv": "^17.4.2",
+    "googleapis": "^173.0.0",
+    "luxon": "^3.7.2",
     "openai": "^6.44.0"
   }
 }

@@ -53,11 +53,13 @@ If you want to see the knowledge layout without private content, use
 
 ## Layout
 
-- `api/chat.js` — the serverless endpoint (agent loop + RAG). Deployed as a Vercel function.
+- `api/chat.js` — the serverless endpoint (agent loop + RAG + optional booking). Deployed as a Vercel function.
+- `lib/send-message.js` — outbound email to Hiu Yan via Resend.
+- `scripts/google-auth.js` — one-time OAuth consent helper for the refresh token.
 - `wiki-template/` — public scaffold of the wiki schema and folder structure.
 - `scripts/build-wiki.js` — generates `helium_wiki/` from the private wiki + redactions. Local-only inputs and output, both gitignored.
 - `scripts/embed.js` — truncates and re-embeds `helium_wiki/` into Supabase. Run after `build-wiki.js`.
-- `wiki-redactions/` — deliberately vague overrides for anything under NDA or unpublished (currently: Matter Lab). Local-only / gitignored.
+- `wiki-redactions/` — deliberately vague overrides for anything under NDA or unpublished (currently: Matter Lab + DORL Lab; BIRAS paper-deep pages listed in `EXCLUDE`). Local-only / gitignored.
 
 ## Wiki structure template
 
@@ -90,6 +92,45 @@ Set these locally in `.env` (gitignored) and in the Vercel project:
 | `OPENAI_API_KEY` | embeddings for search |
 | `SUPABASE_URL` / `SUPABASE_ANON_KEY` | vector + full-text store (`wiki_chunks` + `search_wiki` RPC) |
 | `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | rate limiting |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_CALENDAR_REFRESH_TOKEN` | optional — enables in-chat booking via Google Calendar |
+| `BOOKING_*` | optional — booking window rules (defaults: Mon–Fri 9am–7pm Toronto, 30 min) |
+| `RESEND_API_KEY` / `MESSAGE_TO_EMAIL` / `MESSAGE_FROM_EMAIL` | optional — enables in-chat message sending via email |
+
+## Contact flow (optional)
+
+When a recruiter wants to connect, Helium asks for their **email first**, then offers:
+
+1. **Send a message** — Helium turns the conversation into a professional email and sends it to you via Resend (reply-to set to the visitor).
+2. **Book a meeting** — Helium checks Google Calendar availability and creates a 30-minute event with Google Meet.
+
+Both paths require the visitor's email before any tool runs.
+
+## Google Calendar booking (optional)
+
+Helium can check real availability and create 30-minute portfolio chats on Google
+Calendar, with a Meet link and calendar invite sent to the recruiter.
+
+One-time setup:
+
+```bash
+# 1. In Google Cloud Console: enable Calendar API, create OAuth client (Web/Desktop),
+#    add redirect URI http://localhost:3000/oauth2callback
+# 2. Put GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env
+npm run google:auth   # paste the auth code, copy refresh token into .env
+npm run test:booking  # lists slots + creates one test event (delete manually)
+```
+
+Booking tools only register when `GOOGLE_CALENDAR_REFRESH_TOKEN` is set.
+
+### Resend setup (for send_message)
+
+```bash
+# 1. Create a Resend account and verify your sending domain (or use onboarding@resend.dev for testing)
+# 2. Add to .env:
+#    RESEND_API_KEY=re_...
+#    MESSAGE_TO_EMAIL=hiuyan.kwok@mail.utoronto.ca
+#    MESSAGE_FROM_EMAIL=Helium <hello@hiuyankwok.com>
+```
 
 ## Local development
 

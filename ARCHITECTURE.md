@@ -57,10 +57,64 @@ This combination improves recall for both paraphrased questions and exact tokens
 
 - The model decides when retrieval is needed
 - The server executes retrieval through `search_wiki`
+- When Google Calendar credentials are configured, the model can also call
+  `check_availability` and `create_booking`
+- When Resend is configured, the model can call `send_message`
 - The loop supports multiple tool calls in one turn
 - Any non-tool stop reason returns the response immediately
 
 This keeps policy and orchestration in one place and avoids brittle hardcoded retrieval on every single user message.
+
+## Booking Design
+
+When enabled, Helium books 30-minute portfolio chats directly on Google Calendar.
+
+### Auth
+
+- OAuth refresh token stored in env (`GOOGLE_CALENDAR_REFRESH_TOKEN`)
+- One-time local consent via `scripts/google-auth.js`
+- Server refreshes short-lived access tokens automatically per request
+
+### Availability
+
+Google Calendar exposes **free/busy**, not precomputed slots. Helium:
+
+1. Queries `freebusy.query` for the requested date range (busy windows only — never event titles)
+2. Generates candidate 30-minute windows from booking rules (Mon–Fri, 9:00–19:00 America/Toronto by default)
+3. Removes intervals that overlap busy blocks
+4. Returns a **small day-spread sample** of open slots (~6) to the model — never a full-week dump
+
+The system prompt forbids mentioning busy reasons, event contents, or dumping full-day availability.
+
+### Booking write path
+
+`create_booking`:
+
+1. Re-checks free/busy for the chosen slot (race guard)
+2. Inserts a calendar event with attendee + `sendUpdates: 'all'`
+3. Requests a Google Meet link via `conferenceData`
+4. Is rate-limited separately (3 bookings/hour/IP via Upstash)
+
+Google Calendar remains the source of truth — bookings are not mirrored in Supabase.
+
+## Message Design
+
+When enabled, Helium can email Hiu Yan on a visitor's behalf via Resend.
+
+### Contact gate
+
+For any connect/meet/follow-up intent, the model must:
+
+1. Collect the visitor's email first
+2. Ask whether they want to send a message or book a meeting
+3. Only then call `send_message` or the booking tools
+
+### send_message
+
+- Turns conversation context into a subject + body
+- Sends to `MESSAGE_TO_EMAIL` with `reply_to` set to the visitor
+- Rate-limited separately (3 messages/hour/IP)
+- Requires `RESEND_API_KEY` and a verified `MESSAGE_FROM_EMAIL` domain for production
 
 ## Data Flow
 
@@ -68,8 +122,8 @@ This keeps policy and orchestration in one place and avoids brittle hardcoded re
 
 - Source files live in a private sibling repo (`personal-wiki/wiki/`), not this one
 - `scripts/build-wiki.js` copies each file into `helium_wiki/`, substituting a
-  redacted override from `wiki-redactions/` where one exists (currently: Matter Lab,
-  which is under NDA and pre-publication)
+  redacted override from `wiki-redactions/` where one exists (currently: Matter Lab
+  under NDA/pre-publication, and DORL Lab early-stage/unpublished work)
 - `scripts/embed.js` truncates `wiki_chunks`, then embeds and re-inserts every file
   in `helium_wiki/` — a full rebuild each run, not an incremental upsert, so a page
   removed or newly redacted upstream actually stops being retrievable
@@ -111,10 +165,12 @@ failure modes shaped this design:
 The fix: the private wiki (`personal-wiki/wiki/`, a separate repo) is the only place
 content gets edited. `scripts/build-wiki.js` regenerates `helium_wiki/` from it on
 every run, substituting a local override from `wiki-redactions/` for any page that
-needs one — currently just Matter Lab. The output directory is wiped and rebuilt
-from scratch each run, so a file deleted or newly excluded upstream actually
-disappears downstream instead of lingering — the same reasoning `scripts/embed.js`
-applies at the database layer (truncate before re-insert, not upsert).
+needs one — currently Matter Lab (NDA) and DORL Lab (early-stage / unpublished),
+plus an `EXCLUDE` list for paper-deep pages (e.g. BIRAS internals) that should not
+reach retrieval at all. The output directory is wiped and rebuilt from scratch each
+run, so a file deleted or newly excluded upstream actually disappears downstream
+instead of lingering — the same reasoning `scripts/embed.js` applies at the database
+layer (truncate before re-insert, not upsert).
 `wiki-redactions/` stays gitignored even though its content is already public-safe:
 nothing wiki-shaped lives in this repo at all.
 
