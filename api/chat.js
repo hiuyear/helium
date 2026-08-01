@@ -21,13 +21,13 @@ const ratelimit = new Ratelimit({
 const messageRatelimit = new Ratelimit({
   redis: Redis.fromEnv(),
   prefix: 'helium:message',
-  limiter: Ratelimit.slidingWindow(3, '1 h'),
+  limiter: Ratelimit.slidingWindow(10, '1 h'),
 })
 
 const bookingRatelimit = new Ratelimit({
   redis: Redis.fromEnv(),
   prefix: 'helium:booking',
-  limiter: Ratelimit.slidingWindow(3, '1 h'),
+  limiter: Ratelimit.slidingWindow(5, '1 h'),
 })
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -60,7 +60,7 @@ Use the search_wiki tool to look up relevant info before answering. Call it mult
 - When you name a specific project or experience, end with a separate "learn more" line that includes its writeup URL from the retrieved wiki (the Writeup: line) as a full https://hiuyankwok.com/... URL in plain text so the portfolio UI can make it clickable. Put a blank line between the main answer and that learn-more line (one empty line — so the URL is not stuck to the pitch). Do not invent slugs; if the wiki has no Writeup URL, omit the learn-more line.
 - Don't volunteer schedule or availability unprompted. If they ask whether she is open to internships, what she is seeking, or timing (Winter/Summer/etc.), answer that fact from the wiki (goals / identity).
 - Contact flow — when they want to connect, reach out, discuss further, meet, network, interview, book time, or follow up on opportunities: (1) briefly answer any factual wiki part first; (2) then you MUST ask for their email before anything else — do not call check_availability, create_booking, or send_message until you have a valid email; (3) once you have their email, ask whether they want to send a message to Hiu Yan or book a 30-minute meeting. Do not skip steps 2–3, and do not only ask what role they are hiring for instead of offering contact.
-- Message path: help them say what they want in plain language, turn the conversation into a concise professional email with a clear subject and body, confirm briefly if needed, then call send_message with their email, optional name, subject, and body. Tell them Hiu Yan will reply by email.
+- Message path: help them say what they want in plain language, turn the conversation into a concise professional email with a clear subject and body, confirm briefly if needed, then call send_message with their email, optional name, subject, and body. When they confirm (e.g. "yes", "send it", "looks good"), call send_message immediately with that drafted subject and body — do not ask again. Tell them Hiu Yan will reply by email only after send_message succeeds. If send_message returns an error, report that it failed and offer to retry or use the manual email fallback — never claim it sent.
 - Booking path: ask for their full name if you do not have it yet, then call check_availability for the next 2-3 days starting from ${today} (endDate about 2 days after startDate). Offer only the short list of soonest open times returned by the tool (America/Toronto, 30 minutes each). Prefer the earliest options. If the tool returns widenedBeyondPreferred true or no near-term slots, say nearer times were full and offer the later options — never invent "no slots" if the tool returned slots. Ask which slot they want, then call create_booking using the exact startUtc from check_availability and the email you already collected. Never claim you lack calendar access — use the booking tools when they are available.
 - Calendar privacy (hard rules): never invent, describe, or explain why a time is unavailable. Never mention what Hiu Yan is doing, her events, meetings, classes, or busy blocks. Never dump a full day or week of availability. Only offer the small set of bookable slots from check_availability. If they ask what she is busy with, decline and offer a different open slot or the message path instead.
 - Do not collect contact info or run contact tools for general wiki questions.
@@ -242,6 +242,11 @@ function isValidEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
 }
 
+function clientIp(raw) {
+  const value = Array.isArray(raw) ? raw[0] : String(raw ?? '127.0.0.1')
+  return value.split(',')[0].trim() || '127.0.0.1'
+}
+
 async function executeTool(toolUse, ip) {
   switch (toolUse.name) {
     case 'search_wiki':
@@ -253,10 +258,10 @@ async function executeTool(toolUse, ip) {
     }
 
     case 'send_message': {
-      const { success } = await messageRatelimit.limit(ip)
+      const { success } = await messageRatelimit.limit(clientIp(ip))
       if (!success) {
         return JSON.stringify({
-          error: 'Too many message attempts from this address. Please try again later or email hiuyan.kwok@mail.utoronto.ca directly.',
+          error: 'Message rate limit reached (temporary). Ask them to try again in a few minutes. Do not invent a successful send.',
         })
       }
 
@@ -278,17 +283,19 @@ async function executeTool(toolUse, ip) {
           subject,
           body,
         })
+        console.log('send_message ok', { id: result.id, to: result.to })
         return JSON.stringify(result)
       } catch (err) {
+        console.error('send_message failed', err)
         return JSON.stringify({ error: err.message ?? 'Failed to send message.' })
       }
     }
 
     case 'create_booking': {
-      const { success } = await bookingRatelimit.limit(ip)
+      const { success } = await bookingRatelimit.limit(clientIp(ip))
       if (!success) {
         return JSON.stringify({
-          error: 'Too many booking attempts from this address. Please try again later or email hiuyan.kwok@mail.utoronto.ca.',
+          error: 'Booking rate limit reached (temporary). Ask them to try again in a few minutes.',
         })
       }
 
@@ -319,7 +326,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
-  const ip = req.headers['x-forwarded-for'] ?? '127.0.0.1'
+  const ip = clientIp(req.headers['x-forwarded-for'] ?? req.headers['x-real-ip'] ?? '127.0.0.1')
   const { success } = await ratelimit.limit(ip)
   if (!success) {
     return res.status(429).json({ error: 'Too many requests. Please slow down.' })
