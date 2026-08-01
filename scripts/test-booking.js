@@ -25,7 +25,7 @@ async function main() {
     start: first.startUtc,
     attendee: {
       name: 'Helium Test',
-      email: 'hiuyan.kwok@mail.utoronto.ca',
+      email: 'hiuyankwok.tech@gmail.com',
       timeZone: availability.timeZone,
     },
   })
