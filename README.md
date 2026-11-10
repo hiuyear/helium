@@ -128,8 +128,8 @@ Booking tools only register when `GOOGLE_CALENDAR_REFRESH_TOKEN` is set.
 # 1. Create a Resend account and verify your sending domain (or use onboarding@resend.dev for testing)
 # 2. Add to .env:
 #    RESEND_API_KEY=re_...
-#    MESSAGE_TO_EMAIL=hiuyan.kwok@mail.utoronto.ca
-#    MESSAGE_FROM_EMAIL=Helium <hello@hiuyankwok.com>
+#    MESSAGE_TO_EMAIL=hiuyankwok.tech@gmail.com
+#    MESSAGE_FROM_EMAIL=Helium <onboarding@resend.dev>
 ```
 
 ## Local development
